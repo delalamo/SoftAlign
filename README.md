@@ -13,7 +13,7 @@ SoftAlign also introduces a novel pseudo-alignment method based on softmax. This
 To facilitate ease of use and reproducibility, we provide three Google Colab notebooks:
 
 1. **Training Notebook**: Reproduces the training process with the same train-test split as described in our paper.  
-   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)  
+   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)  
    [SoftAlign_training.ipynb](https://github.com/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)
 
 2. **Inference Notebook**: Allows users to experiment with the learned aligners on their own data.  
