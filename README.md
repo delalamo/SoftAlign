@@ -13,16 +13,16 @@ SoftAlign also introduces a novel pseudo-alignment method based on softmax. This
 To facilitate ease of use and reproducibility, we provide three Google Colab notebooks:
 
 1. **Training Notebook**: Reproduces the training process with the same train-test split as described in our paper.  
-   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)  
-   [SoftAlign_training.ipynb](https://github.com/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)
+   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)  
+   [SoftAlign_training.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)
 
 2. **Inference Notebook**: Allows users to experiment with the learned aligners on their own data.  
-   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)  
-   [COLAB_SoftAlign.ipynb](https://github.com/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)
+   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)  
+   [COLAB_SoftAlign.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)
 
 3. **All-vs-All Search Notebook**: Performs an all-vs-all search within the SCOPE 40 dataset. *Note: This notebook is still in development.*  
-   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/jtrinquier/SoftAlign/blob/main/Colab/SCOPE_SEARCH_SoftAlign.ipynb)  
-   [SCOPE_SEARCH_SoftAlign.ipynb](https://github.com/jtrinquier/SoftAlign/blob/main/Colab/SCOPE_SEARCH_SoftAlign.ipynb)
+   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SCOPE_SEARCH_SoftAlign.ipynb)  
+   [SCOPE_SEARCH_SoftAlign.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SCOPE_SEARCH_SoftAlign.ipynb)
 
 
 
