@@ -12,17 +12,28 @@ SoftAlign also introduces a novel pseudo-alignment method based on softmax. This
 
 To facilitate ease of use and reproducibility, we provide three Google Colab notebooks:
 
-1. **Training Notebook**: Reproduces the training process with the same train-test split as described in our paper.  
-   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)  
-   [SoftAlign_training.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)
+1. **Inference Notebook**: What it does:
 
-2. **Inference Notebook**: Allows users to experiment with the learned aligners on their own data.  
+    Loads AlphaFold or PDB structures by ID, or accepts custom .pdb files
+
+    Runs SoftAlign to generate and visualize the alignment
+
+    Computes TM-score and LDDT scores for quantitative comparison
+
+    Lets you adjust the temperature to control alignment softness
+
+    Includes an optional softmax mode to explore the pseudo-alignment method.
+   
    [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)  
    [COLAB_SoftAlign.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)
 
-3. **All-vs-All Search Notebook**: Performs an all-vs-all search within the SCOPE 40 dataset. *Note: This notebook is still in development.*  
+3. **Training Notebook**: Reproduces the training process with the same train-test split as described in our paper.  *Note: This notebook is still in development.*  
+   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)  
+   [SoftAlign_training.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)
+
+4. **All-vs-All Search Notebook**: Performs an all-vs-all search within the SCOPE 40 dataset. *Note: This notebook is still in development.*  
    [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SCOPE_SEARCH_SoftAlign.ipynb)  
    [SCOPE_SEARCH_SoftAlign.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SCOPE_SEARCH_SoftAlign.ipynb)
 
-
+A local version of SoftAlign is currently being prepared. 
 
