@@ -27,7 +27,7 @@ To facilitate ease of use and reproducibility, we provide three Google Colab not
    [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)  
    [COLAB_SoftAlign.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)
 
-3. **Training Notebook**: Reproduces the training process with the same train-test split as described in our paper.  *Note: This notebook is still in development.*  
+3. **Training Notebook**: Reproduces the training process with the same train-test split as described in our paper.  
    [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)  
    [SoftAlign_training.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)
 
