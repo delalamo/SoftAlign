@@ -31,7 +31,7 @@ To facilitate ease of use and reproducibility, we provide three Google Colab not
    [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)  
    [SoftAlign_training.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)
 
-4. **All-vs-All Search Notebook**: Performs an all-vs-all search within the SCOPE 40 dataset. *Note: This notebook is still in development.*  
+4. **All-vs-All Search Notebook**: Performs an all-vs-all search within the SCOPE 40 dataset, you can also input your own pdb folder and perform an all-vs-all search.
    [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/Structure_Search_SoftAlign.ipynb)  
    [Structure_Search_SoftAlign](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/Structure_Search_SoftAlign)
 
