@@ -1,4 +1,4 @@
-## SoftAlign: End-to-End Structural Alignment for Protein Data
+# SoftAlign: End-to-End Structural Alignment for Protein Data
 
 SoftAlign is an advanced alignment method designed to efficiently compare 3D protein structures. By leveraging structural information directly, SoftAlign provides an end-to-end alignment process, allowing for both highly accurate alignments and efficient computations. The method uses the 3D coordinates of protein pairs, transforming them into feature vectors through a retrained encoder of ProteinMPNN. This similarity matrix is then aligned using two strategies: a differentiable Smith-Waterman method and a novel softmax-based pseudo-alignment approach.
 
@@ -8,32 +8,161 @@ SoftAlign also introduces a novel pseudo-alignment method based on softmax. This
 
 ---
 
+## Table of Contents
+
+1.  [Introduction](#softalign-end-to-end-structural-alignment-for-protein-data)
+2.  [Google Colab Notebooks](#-google-colab-notebooks)
+3.  [Local Command-Line Scripts](#local-command-line-scripts)
+    * [Environment Setup](#1-environment-setup)
+    * [Script Usage](#2-script-usage)
+        * [`align.py`](#a-alignpy-pairwise-protein-alignment)
+        * [`structure_search.py`](#b-structure_searchpy-protein-structure-search)
+    * [Troubleshooting and Notes](#3-troubleshooting-and-notes)
+4.  [License](#license)
+5.  [Citation](#citation)
+
+---
+
 ## 🔬 Google Colab Notebooks
 
 To facilitate ease of use and reproducibility, we provide three Google Colab notebooks:
 
-1. **Inference Notebook**: What it does:
+1.  **Inference Notebook**:
+    * Loads AlphaFold or PDB structures by ID, or accepts custom .pdb files.
+    * Runs SoftAlign to generate and visualize the alignment.
+    * Computes TM-score and LDDT scores for quantitative comparison.
+    * Lets you adjust the temperature to control alignment softness.
+    * Includes an optional softmax mode to explore the pseudo-alignment method.
 
-    Loads AlphaFold or PDB structures by ID, or accepts custom .pdb files
+    [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)
+    [COLAB_SoftAlign.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)
 
-    Runs SoftAlign to generate and visualize the alignment
+2.  **Training Notebook**: Reproduces the training process with the same train-test split as described in our paper.
+    [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)
+    [SoftAlign_training.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)
 
-    Computes TM-score and LDDT scores for quantitative comparison
+3.  **All-vs-All Search Notebook**: Performs an all-vs-all search within the SCOPE 40 dataset. You can also input your own PDB folder and perform an all-vs-all search.
+    [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/Structure_Search_SoftAlign.ipynb)
+    [Structure_Search_SoftAlign.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/Structure_Search_SoftAlign.ipynb)
 
-    Lets you adjust the temperature to control alignment softness
+### Local Command-Line Scripts
 
-    Includes an optional softmax mode to explore the pseudo-alignment method.
+For users who prefer local execution or require command-line automation, two dedicated Python scripts (`align.py` and `structure_search.py`) are provided. These scripts adapt functionalities from the original Colab notebooks, enabling pairwise protein alignment and structural database searches directly from your terminal.
+
+#### 1. Environment Setup
+
+To run these scripts locally, follow these steps:
+
+* **Clone the SoftAlign Repository:**
+    Navigate to your desired project directory and clone the official SoftAlign repository. This contains the core model code and pre-trained weights.
+    ```bash
+    git clone [https://github.com/jtrinquier/SoftAlign.git](https://github.com/jtrinquier/SoftAlign.git)
+    cd SoftAlign
+    # (Recommended) Ensure your SoftAlign repository is up-to-date
+    git pull
+    ```
+    Ensure your `local_softalign.py` and `local_structure_search.py` scripts are placed in a location where they can access the `SoftAlign` directory (e.g., in the same parent directory as the cloned `SoftAlign` folder).
+
+* **Create and Activate Conda Environment:**
+    Create a new Conda environment with Python 3.10 (or a newer compatible version like 3.11/3.12).
+    ```bash
+    conda create -n softalign_env python=3.10
+    conda activate softalign_env
+    ```
+
+* **Install Dependencies:**
+    With your `softalign_env` active, install the necessary Python packages:
+    * **Core Packages:**
+        ```bash
+        conda install numpy pandas matplotlib biopython
+        ```
+    * **JAX (Choose one based on your hardware):**
+        * **For CPU:**
+            ```bash
+            pip install jax[cpu]
+            ```
+        * **For CUDA (NVIDIA GPU users - IMPORTANT: Check your CUDA Version with `nvidia-smi`):**
+            Choose the `jaxlib` version compatible with your CUDA Toolkit. For example, if `nvidia-smi` shows CUDA 12.x:
+            ```bash
+            pip install jax[cuda12_pip] -f [https://storage.googleapis.com/jax-releases/jax_cuda_releases.html](https://storage.googleapis.com/jax-releases/jax_cuda_releases.html)
+            ```
+    * **dm-haiku :**
+        ```bash
+        pip install git+[https://github.com/deepmind/dm-haiku](https://github.com/deepmind/dm-haiku)
+        ```
+    * **gdown (for downloading SCOPE database):**
+        ```bash
+        pip install gdown
+        ```
+
+
+
+#### 2. Script Usage
+
+Activate your `softalign_env` (`conda activate softalign_env`) before running these commands.
+
+##### a. `align.py` (Pairwise Protein Alignment)
+
+This script performs soft alignment between two proteins, calculates LDDT scores, and visualizes/saves the alignment and similarity matrices.
+
+* **Arguments:**
+    * `--pdb_source`: (`af` (default) | `pdb` | `custom`) Source of PDB files.
+    * `--pdb1_id`: Identifier for the first protein.
+    * `--pdb2_id`: Identifier for the second protein.
+    * `--temperature`: (Optional, float) Alignment temperature (default: `1e-4`).
+    * `--output_dir`: (Optional, str) Directory to save plots and `.npy` alignment matrix (default: `./softalign_output`).
+
+* **Example: Aligning two proteins from AlphaFold DB:**
+    ```bash
+    python align.py --pdb1_id Q5VSL9 --pdb2_id A0A7L4L2T3 --output_dir ./pairwise_alignments
+    ```
+    *(For custom PDB files, ensure they are in the current directory and use `--pdb_source custom --pdb1_id my_protein_A.pdb`)*
+
+##### b. `structure_search.py` (Protein Structure Search)
+
+This script allows for structural searches (one-vs-all or all-vs-all) against a database, and optionally plots a specific pairwise alignment from the loaded dataset.
+
+* **Data Source Arguments:**
+    * `--use_scope_database`: (Flag) Uses a precomputed SCOPE database.
+    * `--pdb_folder_path`: (str) Path to your custom PDB folder (required if `--use_scope_database` is not set).
+    * `--chain_ids_file`: (Optional, str) Path to a CSV file (e.g., `id,chain`) for custom PDBs.
+
+* **Model Arguments:**
+    * `--model_type`: (`Softmax` (default) | `Smith-Waterman`) Type of SoftAlign model to use.
+
+* **Search Arguments:**
+    * `--query_id`: (str) ID for a "one-vs-all" search (e.g., `d2dixa1` for SCOPE). Leave empty to skip.
+    * `--run_all_vs_all`: (Flag) Performs a full all-vs-all search across the dataset.
+
+* **Optional Pairwise Plotting Arguments (from loaded dataset):**
+    * `--pdb1_to_plot_id`: (str) First PDB ID for plot.
+    * `--pdb2_to_plot_id`: (str) Second PDB ID for plot.
+    * `--temperature`: (Optional, float) Alignment temperature for this specific plot.
+
+* **Output Arguments:**
+    * `--output_dir`: (Optional, str) Directory to save score CSVs, plots, and `.npy` files (default: `./softalign_search_output`).
+
+* **Example 1: One-vs-all search with SCOPE database and specific pairwise plot:**
+    ```bash
+    python structure_search.py \
+        --use_scope_database \
+        --model_type Softmax \
+        --query_id d2dixa1 \
+        --pdb1_to_plot_id d1a8oa \
+        --pdb2_to_plot_id d1qrjb1 \
+        --output_dir ./search_and_plot_results
+    ```
    
-   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)  
-   [COLAB_SoftAlign.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/COLAB_SoftAlign.ipynb)
 
-3. **Training Notebook**: Reproduces the training process with the same train-test split as described in our paper.  
-   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)  
-   [SoftAlign_training.ipynb](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/SoftAlign_training.ipynb)
+* **Example 2: All-vs-all search using a custom PDB folder:**
+    ```bash
+    # Assuming 'my_pdbs' folder exists with .pdb files
+    python local_structure_search.py \
+        --pdb_folder_path ./my_pdbs \
+        --model_type Smith-Waterman \
+        --run_all_vs_all \
+        --output_dir ./my_custom_search_results
+    ```
 
-4. **All-vs-All Search Notebook**: Performs an all-vs-all search within the SCOPE 40 dataset, you can also input your own pdb folder and perform an all-vs-all search.
-   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/Structure_Search_SoftAlign.ipynb)  
-   [Structure_Search_SoftAlign](https://colab.research.google.com/github/jtrinquier/SoftAlign/blob/main/Colab/Structure_Search_SoftAlign)
 
-A local version of SoftAlign is currently being prepared. 
 
