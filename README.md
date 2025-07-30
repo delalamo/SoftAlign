@@ -81,11 +81,11 @@ To run these scripts locally, follow these steps:
         * **For CUDA (NVIDIA GPU users - IMPORTANT: Check your CUDA Version with `nvidia-smi`):**
             Choose the `jaxlib` version compatible with your CUDA Toolkit. For example, if `nvidia-smi` shows CUDA 12.x:
             ```bash
-            pip install jax[cuda12_pip] -f [https://storage.googleapis.com/jax-releases/jax_cuda_releases.html](https://storage.googleapis.com/jax-releases/jax_cuda_releases.html)
+            pip install jax[cuda12_pip] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
             ```
     * **dm-haiku :**
         ```bash
-        pip install git+[https://github.com/deepmind/dm-haiku](https://github.com/deepmind/dm-haiku)
+        pip install git+https://github.com/deepmind/dm-haiku
         ```
     * **gdown (for downloading SCOPE database):**
         ```bash
