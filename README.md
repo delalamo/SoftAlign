@@ -56,7 +56,7 @@ To run these scripts locally, follow these steps:
 * **Clone the SoftAlign Repository:**
     Navigate to your desired project directory and clone the official SoftAlign repository. This contains the core model code and pre-trained weights.
     ```bash
-    git clone [https://github.com/jtrinquier/SoftAlign.git](https://github.com/jtrinquier/SoftAlign.git)
+    git clone https://github.com/jtrinquier/SoftAlign.git
     cd SoftAlign
     ```
 
