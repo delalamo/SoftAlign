@@ -58,10 +58,7 @@ To run these scripts locally, follow these steps:
     ```bash
     git clone [https://github.com/jtrinquier/SoftAlign.git](https://github.com/jtrinquier/SoftAlign.git)
     cd SoftAlign
-    # (Recommended) Ensure your SoftAlign repository is up-to-date
-    git pull
     ```
-    Ensure your `local_softalign.py` and `local_structure_search.py` scripts are placed in a location where they can access the `SoftAlign` directory (e.g., in the same parent directory as the cloned `SoftAlign` folder).
 
 * **Create and Activate Conda Environment:**
     Create a new Conda environment with Python 3.10 (or a newer compatible version like 3.11/3.12).
