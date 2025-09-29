@@ -94,7 +94,7 @@ class END_TO_END:
           popen = hk.get_parameter("open", shape=[1],init = hk.initializers.RandomNormal(0.1,-3))
       #######
       # sim_matrix = jnp.einsum("nia,nja->nij",h_V1,h_V2)
-      sim_matrix = rbf_sim(h_V1, h_V2)
+      sim_matrix = self.rbf_sim(h_V1, h_V2)
       if self.soft_max == False:
         if self.affine:
             scores,soft_aln  = self.my_sw_func(sim_matrix, lens,gap[0],popen[0],t)
