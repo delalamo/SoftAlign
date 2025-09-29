@@ -77,7 +77,7 @@ class END_TO_END:
       self.siz = node_features
       self.soft_max = soft_max
 
-    def rbf_sim(h_V1, h_V2, sigma=1.0):
+    def rbf_sim(self, h_V1, h_V2, sigma=1.0):
       # h_V1: (n, i, a), h_V2: (n, j, a)
       diff = h_V1[:, :, None, :] - h_V2[:, None, :, :]   # shape (n, i, j, a)
       sqdist = jnp.sum(diff**2, axis=-1)                 # shape (n, i, j)
