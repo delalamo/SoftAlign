@@ -77,12 +77,6 @@ class END_TO_END:
       self.siz = node_features
       self.soft_max = soft_max
 
-    def rbf_sim(self, h_V1, h_V2, sigma=1.0):
-      # h_V1: (n, i, a), h_V2: (n, j, a)
-      diff = h_V1[:, :, None, :] - h_V2[:, None, :, :]   # shape (n, i, j, a)
-      sqdist = jnp.sum(diff**2, axis=-1)                 # shape (n, i, j)
-      return jnp.exp(-sqdist / (2 * sigma**2))           # RBF kernel
-    
     def __call__(self,x1,x2,lens,t):
       X1,mask1,res1,ch1 = x1
       X2,mask2,res2,ch2 = x2
@@ -93,8 +87,7 @@ class END_TO_END:
       if self.affine:
           popen = hk.get_parameter("open", shape=[1],init = hk.initializers.RandomNormal(0.1,-3))
       #######
-      # sim_matrix = jnp.einsum("nia,nja->nij",h_V1,h_V2)
-      sim_matrix = self.rbf_sim(h_V1, h_V2)
+      sim_matrix = jnp.einsum("nia,nja->nij",h_V1,h_V2)
       if self.soft_max == False:
         if self.affine:
             scores,soft_aln  = self.my_sw_func(sim_matrix, lens,gap[0],popen[0],t)
