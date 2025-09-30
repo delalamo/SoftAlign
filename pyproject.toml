@@ -28,3 +28,6 @@ dependencies = [
   "tensorstore==0.1.75",
   "treescope==0.1.9",
 ]
+
+[tool.setuptools]
+packages = ["softalign"]
