@@ -43,7 +43,7 @@ def get_pdb(x, chains=None):
       ch = line[21:22]
       if chains is None or ch in chains:
         resi, resn = line[17:17+3], line[22:22+5].strip()
-        resn = int(resn[:-1] if resn[-1].isalpha() else resn)
+        # resn = int(resn[:-1] if resn[-1].isalpha() else resn)
         
         id = f"{ch}.{resn}"
         if id not in ids:
