@@ -1,10 +1,8 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import vmap
-import numpy as np
-import numpy as np
-
-import SW as sw
+from softalign import SW as sw
 
 #### Alignment functions
 

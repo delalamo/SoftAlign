@@ -1,8 +1,9 @@
 import haiku as hk
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
 import numpy as np
-import MPNN as MPNN
+from softalign import MPNN
+
 
 class ENCODING:
     def __init__(self,  node_features = 64,

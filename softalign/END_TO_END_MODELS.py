@@ -1,9 +1,9 @@
-import jax 
-import jax.numpy as jnp
 import haiku as hk
-import MPNN
-import SW
+import jax
+import jax.numpy as jnp
 from jax import vmap
+from softalign import MPNN, SW
+
 
 def soft_max_single(sim_matrix, lens, t):
     """ 

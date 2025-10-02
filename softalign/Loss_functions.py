@@ -1,8 +1,9 @@
-import jax 
-import jax.numpy as jnp 
-import haiku as hk 
+import haiku as hk
+import jax
+import jax.numpy as jnp
+
 #import Score_align as lddt_
-import LDDT_LOSS as lddt_
+from softalign import LDDT_LOSS as lddt_
 
 key = jax.random.PRNGKey(0)
 

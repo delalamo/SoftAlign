@@ -1,13 +1,12 @@
+import csv
+import time
+from collections import defaultdict, namedtuple
+from functools import lru_cache
+
 import jax
 import jax.numpy as jnp
 import numpy as np
-from collections import defaultdict, namedtuple
-from functools import lru_cache
-import csv
-import time
-
-import Score_align as score_
-
+from softalign import Score_align as score_
 
 
 def pad_enc(t, target_len):

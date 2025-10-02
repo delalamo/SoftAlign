@@ -1,6 +1,6 @@
-import numpy as np 
-import jax 
-import jax.numpy as jnp 
+import jax
+import jax.numpy as jnp
+import numpy as np
 
 
 def pad_(X_1, mask_1, res_1, chain_1, X_2, mask_2, res_2, chain_2, max_len):
