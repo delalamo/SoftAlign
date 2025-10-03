@@ -77,13 +77,8 @@ class END_TO_END:
       self.siz = node_features
       self.soft_max = soft_max
 
-    def __call__(self,x1,x2,lens,t):
-      X1,mask1,res1,ch1 = x1
-      X2,mask2,res2,ch2 = x2
-      h_V1 = self.MPNN(X1,mask1,res1,ch1)
-      h_V2 = self.MPNN(X2,mask2,res2,ch2)
-      #encodings
-      gap = hk.get_parameter("gap", shape=[1],init = hk.initializers.RandomNormal(0.1,-1))
+    def align(self, h_V1, h_V2, lens, t):
+      gap = hk.get_parameter("gap", shape=[1], init=hk.initializers.RandomNormal(0.1, -1))
       if self.affine:
           popen = hk.get_parameter("open", shape=[1],init = hk.initializers.RandomNormal(0.1,-3))
       #######
@@ -100,6 +95,14 @@ class END_TO_END:
         soft_aln = vmap(soft_max_single, in_axes=(0, 0, None))(sim_matrix, lens,t)
         scores = max_ali(soft_aln)
         return soft_aln,sim_matrix,scores 
+
+    def __call__(self,x1,x2,lens,t):
+      X1,mask1,res1,ch1 = x1
+      X2,mask2,res2,ch2 = x2
+      h_V1 = self.MPNN(X1,mask1,res1,ch1)
+      h_V2 = self.MPNN(X2,mask2,res2,ch2)
+      
+      return self.align(h_V1, h_V2, lens, t)
 
 
 

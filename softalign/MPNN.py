@@ -1,7 +1,8 @@
-import haiku as hk
-import jax.numpy as jnp
-import jax
 import functools
+
+import haiku as hk
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 Gelu = functools.partial(jax.nn.gelu, approximate=False)
@@ -26,7 +27,7 @@ class SafeKey:
         self._assert_not_used()
         self._used = True
         new_keys = jax.random.split(self._key, num_keys)
-        return jax.tree_map(SafeKey, tuple(new_keys))
+        return jax.tree_util.tree_map(SafeKey, tuple(new_keys))
 
     def duplicate(self, num_keys=2):
         self._assert_not_used()

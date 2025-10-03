@@ -1,6 +1,7 @@
-import jax 
-import numpy as np
+import jax
 import jax.numpy as jnp
+import numpy as np
+
 
 def _np_norm(x, axis=-1, keepdims=True, eps=1e-8, use_jax=True):
   '''compute norm of vector'''
@@ -45,7 +46,7 @@ def get_pdb(x, chains=None):
         resi, resn = line[17:17+3], line[22:22+5].strip()
         # resn = int(resn[:-1] if resn[-1].isalpha() else resn)
         
-        id = f"{ch}.{resn}"
+        id = f"{resn}"
         if id not in ids:
           coords[id] = {}
           seq.append(restype_3to1.get(resi,"X"))
@@ -77,10 +78,12 @@ def get_pdb(x, chains=None):
 
 def get_inputs_mpnn(pdb_path,chain = None):
 
-    coords = get_pdb(pdb_path, chain)["xyz"]
+    data = get_pdb(pdb_path, chain)
+    coords = data["xyz"]
+    ids = data["ids"]
     cond = ~np.isnan(coords).any(axis=(1,2))
     mask_ = np.ones(coords.shape[0])[cond]
     chain_ = np.ones(coords.shape[0])[cond]
     res = np.arange(coords.shape[0])[cond]
     coords = coords[cond,:]
-    return coords[None,:],mask_[None,:],chain_[None,:],res[None,:]
+    return coords[None,:],mask_[None,:],chain_[None,:],res[None,:], ids
