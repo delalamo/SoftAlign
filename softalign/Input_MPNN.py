@@ -40,7 +40,8 @@ def get_pdb(x, chains=None):
   for line in open(x,"rb"):
     line = line.decode("utf-8","ignore").rstrip()
 
-    if line[:4] == "ATOM" or line[:6] == "HETATM":
+    # if line[:4] == "ATOM" or line[:6] == "HETATM":
+    if line[:4] == "ATOM":
       ch = line[21:22]
       if chains is None or ch in chains:
         resi, resn = line[17:17+3], line[22:22+5].strip()
