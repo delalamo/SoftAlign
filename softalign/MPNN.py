@@ -78,10 +78,17 @@ class PositionalEncodings(hk.Module):
         E = self.linear(jax.lax.convert_element_type(d_onehot, jnp.float32))
         return E
 class ProteinFeatures(hk.Module):
-    def __init__(self, edge_features, node_features,
-                 num_positional_embeddings=16,
-                 num_rbf=16, top_k=30,
-                 augment_eps=0., num_chain_embeddings=16):
+    def __init__(
+        self,
+        edge_features,
+        node_features,
+        num_positional_embeddings=16,
+        num_rbf=16,
+        top_k=30,
+        augment_eps=0.0,
+        num_chain_embeddings=16,
+        random_cubic_neighbors: int = 0,
+    ):
         """ Extract protein features """
         super(ProteinFeatures, self).__init__()
         self.edge_features = edge_features
@@ -90,6 +97,7 @@ class ProteinFeatures(hk.Module):
         self.augment_eps = augment_eps
         self.num_rbf = num_rbf
         self.num_positional_embeddings = num_positional_embeddings
+        self.random_cubic_neighbors = max(0, min(random_cubic_neighbors, top_k))
 
         self.embeddings = PositionalEncodings(num_positional_embeddings)
         node_in, edge_in = 6, num_positional_embeddings + num_rbf*25
@@ -102,14 +110,14 @@ class ProteinFeatures(hk.Module):
         mask_2D = jnp.expand_dims(mask, 1) * jnp.expand_dims(mask, 2)
         dX = jnp.expand_dims(X, 1) - jnp.expand_dims(X, 2)
         D = mask_2D * jnp.sqrt(jnp.sum(dX**2, 3) + eps)
-        #print(D[0])
         D_max = jnp.max(D, -1, keepdims=True)
         D_adjust = D + (1. - mask_2D) * D_max
-        sampled_top_k = self.top_k
-        D_neighbors, E_idx = jax.lax.approx_min_k(D_adjust,
-                                                  np.minimum(self.top_k, X.shape[1]),
-                                                  reduction_dimension=-1)
-        return D_neighbors, E_idx
+        _, E_idx = jax.lax.approx_min_k(
+            D_adjust,
+            np.minimum(self.top_k, X.shape[1]),
+            reduction_dimension=-1,
+        )
+        return D, E_idx, mask_2D
 
     def _rbf(self, D):
         D_min, D_max, D_count = 2., 22., self.num_rbf
@@ -126,6 +134,38 @@ class ProteinFeatures(hk.Module):
         RBF_A_B = self._rbf(D_A_B_neighbors)
         return RBF_A_B
 
+    def _sample_inverse_cubic_neighbors(self, D, mask_2D, base_idx):
+        rand_count = min(self.random_cubic_neighbors, base_idx.shape[-1])
+        if rand_count <= 0:
+            return base_idx
+        keep_count = base_idx.shape[-1] - rand_count
+        deterministic = base_idx[:, :, :keep_count]
+        total_len = base_idx.shape[-1]
+
+        weights = mask_2D / jnp.maximum(D, 1e-6) ** 3
+        eye = jnp.eye(weights.shape[-1], dtype=weights.dtype)
+        weights = weights * (1.0 - eye)
+        if keep_count > 0:
+            b_idx = jnp.arange(weights.shape[0])[:, None, None]
+            n_idx = jnp.arange(weights.shape[1])[None, :, None]
+            weights = weights.at[b_idx, n_idx, deterministic].set(0.0)
+
+        weight_sums = jnp.sum(weights, axis=-1, keepdims=True)
+        logits = jnp.log(jnp.maximum(weights, 1e-12))
+        key = hk.next_rng_key()
+        g = jax.random.gumbel(key, logits.shape)
+        scores = logits + g
+        scores_flat = scores.reshape(-1, scores.shape[-1])
+        _, rand_idx = jax.lax.top_k(scores_flat, rand_count)
+        rand_idx = rand_idx.reshape(weights.shape[0], weights.shape[1], rand_count)
+
+        no_weights = weight_sums <= 0
+        fallback = base_idx[:, :, -rand_count:]
+        rand_idx = jnp.where(no_weights, fallback, rand_idx)
+        if keep_count > 0:
+            return jnp.concatenate([deterministic, rand_idx], axis=-1)
+        return rand_idx
+
     def __call__(self, X, mask, residue_idx, chain_labels):
         if self.augment_eps > 0:
             use_key = hk.next_rng_key()
@@ -141,7 +181,10 @@ class ProteinFeatures(hk.Module):
         C = X[:,:,2,:]
         O = X[:,:,3,:]
 
-        D_neighbors, E_idx = self._dist(Ca, mask)
+        D_all, E_idx, mask_2D = self._dist(Ca, mask)
+        if self.random_cubic_neighbors > 0:
+            E_idx = self._sample_inverse_cubic_neighbors(D_all, mask_2D, E_idx)
+        D_neighbors = gather_edges(D_all[:, :, :, None], E_idx)[:, :, :, 0]
 
         RBF_all = []
         RBF_all.append(self._rbf(D_neighbors)) #Ca-Ca
@@ -270,7 +313,8 @@ class ENC:
                  edge_features, hidden_dim,
                  num_encoder_layers=1,
                   k_neighbors=64,
-                 augment_eps=0.05, dropout=0.1):
+                 augment_eps=0.05, dropout=0.1,
+                 random_cubic_neighbors: int = 0):
         super(ENC, self).__init__()
         # Hyperparameters
         self.node_features = node_features
@@ -280,7 +324,8 @@ class ENC:
         self.features = ProteinFeatures(node_features,
                                         edge_features,
                                         top_k=k_neighbors,
-                                        augment_eps=augment_eps)
+                                        augment_eps=augment_eps,
+                                        random_cubic_neighbors=random_cubic_neighbors)
 
         self.W_e = hk.Linear(hidden_dim, with_bias=True, name='W_e')
         # Encoder layers
