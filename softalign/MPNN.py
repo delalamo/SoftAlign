@@ -265,6 +265,75 @@ class EncLayer(hk.Module):
         return h_V, h_E
 
 
+class DecLayer(hk.Module):
+    """Decoder layer for autoregressive sequence generation."""
+    def __init__(self, num_hidden, num_in,
+                 dropout=0.1, num_heads=None,
+                 scale=30, name=None):
+        super(DecLayer, self).__init__()
+        self.num_hidden = num_hidden
+        self.num_in = num_in
+        self.scale = scale
+        self.dropout1 = dropout_cust(dropout)
+        self.dropout2 = dropout_cust(dropout)
+        self.norm1 = hk.LayerNorm(-1, create_scale=True, create_offset=True,
+                                  name=name + '_norm1')
+        self.norm2 = hk.LayerNorm(-1, create_scale=True, create_offset=True,
+                                  name=name + '_norm2')
+
+        self.W1 = hk.Linear(num_hidden, with_bias=True, name=name + '_W1')
+        self.W2 = hk.Linear(num_hidden, with_bias=True, name=name + '_W2')
+        self.W3 = hk.Linear(num_hidden, with_bias=True, name=name + '_W3')
+        self.act = Gelu
+        self.dense = PositionWiseFeedForward(num_hidden, num_hidden * 4,
+                                             name=name + '_dense')
+
+    def __call__(self, h_V, h_E,
+                 mask_V=None, mask_attend=None):
+        """ Parallel computation of full transformer layer """
+        # Concatenate h_V_i to h_E_ij
+        h_V_expand = jnp.tile(jnp.expand_dims(h_V, -2), [1, 1, h_E.shape[-2], 1])
+        h_EV = jnp.concatenate([h_V_expand, h_E], -1)
+
+        h_message = self.W3(self.act(self.W2(self.act(self.W1(h_EV)))))
+        if mask_attend is not None:
+            h_message = jnp.expand_dims(mask_attend, -1) * h_message
+        dh = jnp.sum(h_message, -2) / self.scale
+
+        h_V = self.norm1(h_V + self.dropout1(dh))
+
+        # Position-wise feedforward
+        dh = self.dense(h_V)
+        h_V = self.norm2(h_V + self.dropout2(dh))
+
+        if mask_V is not None:
+            mask_V = jnp.expand_dims(mask_V, -1)
+            h_V = mask_V * h_V
+        return h_V
+
+
+class EmbedToken(hk.Module):
+    """Token embedding layer for sequence encoding."""
+    def __init__(self, vocab_size, embed_dim):
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.embed_dim = embed_dim
+        self.w_init = hk.initializers.TruncatedNormal()
+
+    @property
+    def embeddings(self):
+        return hk.get_parameter("W_s",
+                                [self.vocab_size, self.embed_dim],
+                                init=self.w_init)
+
+    def __call__(self, arr):
+        if jnp.issubdtype(arr.dtype, jnp.integer):
+            one_hot = jax.nn.one_hot(arr, self.vocab_size)
+        else:
+            one_hot = arr
+        return jnp.tensordot(one_hot, self.embeddings, 1)
+
+
 class ENC:
       def __init__(self,  node_features,
                  edge_features, hidden_dim,
@@ -303,3 +372,239 @@ class ENC:
         for layer in self.encoder_layers:
             h_V, h_E = layer(h_V, h_E, E_idx, mask, mask_attend)
         return h_V
+
+
+class ENC_DEC:
+    """Encoder-Decoder model for protein sequence design.
+
+    This class combines the encoder from SoftAlign with the decoder from
+    ColabDesign's ProteinMPNN. It is backwards compatible with ENC - when
+    num_decoder_layers=0, it behaves identically to ENC.
+
+    The decoder enables autoregressive sequence generation given structure.
+    """
+    def __init__(self, node_features, edge_features, hidden_dim,
+                 num_encoder_layers=1, num_decoder_layers=0,
+                 k_neighbors=64, augment_eps=0.05, dropout=0.1,
+                 vocab=21, num_letters=21):
+        super(ENC_DEC, self).__init__()
+        # Hyperparameters
+        self.node_features = node_features
+        self.edge_features = edge_features
+        self.hidden_dim = hidden_dim
+        self.num_decoder_layers = num_decoder_layers
+        self.vocab = vocab
+
+        # Featurization layers
+        self.features = ProteinFeatures(node_features,
+                                        edge_features,
+                                        top_k=k_neighbors,
+                                        augment_eps=augment_eps)
+
+        self.W_e = hk.Linear(hidden_dim, with_bias=True, name='W_e')
+
+        # Encoder layers
+        self.encoder_layers = [
+            EncLayer(hidden_dim, hidden_dim*2, dropout=dropout, name='enc' + str(i))
+            for i in range(num_encoder_layers)
+        ]
+
+        # Decoder layers (optional, for sequence design)
+        # Decoder input is [h_VS_expand, h_ES] where h_ES = [h_E, h_S_neighbors, h_V_neighbors]
+        # So input dim = hidden_dim + hidden_dim*3 = hidden_dim*4 = 512 for hidden_dim=128
+        if num_decoder_layers > 0:
+            self.W_s = EmbedToken(vocab_size=vocab, embed_dim=hidden_dim)
+            self.decoder_layers = [
+                DecLayer(hidden_dim, hidden_dim*4, dropout=dropout, name='dec' + str(i))
+                for i in range(num_decoder_layers)
+            ]
+            self.W_out = hk.Linear(num_letters, with_bias=True, name='W_out')
+        else:
+            self.W_s = None
+            self.decoder_layers = []
+            self.W_out = None
+
+    def encode(self, X, mask, residue_idx, chain_encoding_all):
+        """Run encoder only - same as ENC.__call__"""
+        E, E_idx = self.features(X, mask, residue_idx, chain_encoding_all)
+        h_V = jnp.zeros((E.shape[0], E.shape[1], E.shape[-1]))
+        h_E = self.W_e(E)
+
+        # Encoder is unmasked self-attention
+        mask_attend = gather_nodes(jnp.expand_dims(mask, -1), E_idx).squeeze(-1)
+        mask_attend = jnp.expand_dims(mask, -1) * mask_attend
+        for layer in self.encoder_layers:
+            h_V, h_E = layer(h_V, h_E, E_idx, mask, mask_attend)
+        return h_V, h_E, E_idx
+
+    def decode(self, h_V, h_E, E_idx, S, mask):
+        """Run decoder on encoded features.
+
+        Args:
+            h_V: Node embeddings from encoder [B, L, hidden_dim]
+            h_E: Edge embeddings from encoder [B, L, K, hidden_dim]
+            E_idx: Edge indices [B, L, K]
+            S: Sequence indices [B, L] (integer amino acid indices)
+            mask: Mask for valid positions [B, L]
+
+        Returns:
+            logits: Amino acid logits [B, L, vocab]
+        """
+        if self.num_decoder_layers == 0:
+            raise ValueError("No decoder layers configured. Set num_decoder_layers > 0.")
+
+        # Embed sequence
+        h_S = self.W_s(S)
+
+        # Concatenate sequence embedding to h_V
+        h_VS = h_V + h_S
+
+        # Prepare edge features for decoder
+        # h_ES = [h_E, gathered_h_S, gathered_h_V] to get hidden_dim*3 = 384
+        # Then in decoder: h_EV = [h_VS_expand, h_ES] = hidden_dim*4 = 512
+        h_ES = cat_neighbors_nodes(h_S, h_E, E_idx)  # [h_E, h_S_neighbors] = 256
+        h_EV_neighbors = gather_nodes(h_V, E_idx)    # h_V at neighbor positions = 128
+        h_ES = jnp.concatenate([h_ES, h_EV_neighbors], -1)  # 256 + 128 = 384
+
+        # Decoder mask
+        mask_attend = gather_nodes(jnp.expand_dims(mask, -1), E_idx).squeeze(-1)
+        mask_attend = jnp.expand_dims(mask, -1) * mask_attend
+
+        # Run decoder layers
+        for layer in self.decoder_layers:
+            h_VS = layer(h_VS, h_ES, mask, mask_attend)
+
+        # Output logits
+        logits = self.W_out(h_VS)
+        return logits
+
+    def __call__(self, X, mask, residue_idx, chain_encoding_all, S=None):
+        """Forward pass.
+
+        If S is None, returns only encoder output (backwards compatible with ENC).
+        If S is provided and decoder is configured, returns logits.
+        """
+        h_V, h_E, E_idx = self.encode(X, mask, residue_idx, chain_encoding_all)
+
+        if S is None or self.num_decoder_layers == 0:
+            # Backwards compatible: return encoder output only
+            return h_V
+        else:
+            # Full encoder-decoder: return logits
+            logits = self.decode(h_V, h_E, E_idx, S, mask)
+            return logits
+
+
+import os as _os
+
+# Default path to ProteinMPNN weights (relative to this module)
+_MODELS_DIR = _os.path.join(_os.path.dirname(__file__), 'models')
+DEFAULT_MPNN_WEIGHTS = _os.path.join(_MODELS_DIR, 'v_48_020.pkl')
+
+# Available ProteinMPNN weight variants
+MPNN_WEIGHT_VARIANTS = {
+    'v_48_002': _os.path.join(_MODELS_DIR, 'v_48_002.pkl'),
+    'v_48_010': _os.path.join(_MODELS_DIR, 'v_48_010.pkl'),
+    'v_48_020': _os.path.join(_MODELS_DIR, 'v_48_020.pkl'),  # default
+    'v_48_030': _os.path.join(_MODELS_DIR, 'v_48_030.pkl'),
+}
+
+
+def load_colabdesign_weights(init_params, weights_path=None):
+    """Load ColabDesign ProteinMPNN weights into SoftAlign ENC_DEC model.
+
+    This function maps parameter names from ColabDesign's naming convention
+    (with 'protein_mpnn/~/' prefix) to SoftAlign's naming convention.
+
+    Args:
+        init_params: Initialized parameters from hk.transform(...).init()
+        weights_path: Path to .pkl weights file, or name of variant
+                      (e.g., 'v_48_020'). If None, uses default weights.
+                      Available variants: v_48_002, v_48_010, v_48_020, v_48_030
+
+    Returns:
+        Dictionary of parameters that can be passed to transformed.apply()
+
+    Example:
+        import haiku as hk
+        from softalign import MPNN
+
+        def forward_fn(X, mask, residue_idx, chain_idx, S):
+            model = MPNN.ENC_DEC(
+                node_features=128, edge_features=128, hidden_dim=128,
+                num_encoder_layers=3, num_decoder_layers=3,
+                k_neighbors=48, augment_eps=0.0, dropout=0.0
+            )
+            return model(X, mask, residue_idx, chain_idx, S)
+
+        transformed = hk.transform(forward_fn)
+        init_params = transformed.init(rng, X, mask, residue_idx, chain_idx, S)
+
+        # Use default weights
+        params = MPNN.load_colabdesign_weights(init_params)
+
+        # Or specify a variant
+        params = MPNN.load_colabdesign_weights(init_params, 'v_48_010')
+
+        output = transformed.apply(params, rng, X, mask, residue_idx, chain_idx, S)
+    """
+    import joblib
+
+    # Resolve weights path
+    if weights_path is None:
+        weights_path = DEFAULT_MPNN_WEIGHTS
+    elif weights_path in MPNN_WEIGHT_VARIANTS:
+        weights_path = MPNN_WEIGHT_VARIANTS[weights_path]
+    # Otherwise assume it's a direct path
+
+    checkpoint = joblib.load(weights_path)
+    loaded_params = checkpoint['model_state_dict']
+
+    new_params = {}
+    cd_prefix = 'protein_mpnn/~/'
+
+    for our_key in init_params.keys():
+        cd_key = cd_prefix + our_key
+        if cd_key in loaded_params:
+            new_params[our_key] = loaded_params[cd_key]
+        else:
+            raise KeyError(f"No matching weights found for '{our_key}' "
+                          f"(looked for '{cd_key}')")
+
+    return new_params
+
+
+def create_enc_dec_model(hidden_dim=128, num_encoder_layers=3, num_decoder_layers=3,
+                         k_neighbors=48, augment_eps=0.0, dropout=0.0,
+                         vocab=21, num_letters=21):
+    """Create an ENC_DEC model with configuration matching ColabDesign ProteinMPNN.
+
+    This is a convenience function that creates an ENC_DEC model with the same
+    default configuration as ColabDesign's ProteinMPNN, making it easy to load
+    pre-trained weights.
+
+    Args:
+        hidden_dim: Dimension of hidden layers (default 128 to match ProteinMPNN)
+        num_encoder_layers: Number of encoder layers (default 3)
+        num_decoder_layers: Number of decoder layers (default 3)
+        k_neighbors: Number of nearest neighbors in graph (default 48)
+        augment_eps: Backbone noise augmentation (default 0.0)
+        dropout: Dropout rate (default 0.0)
+        vocab: Vocabulary size for input sequences (default 21)
+        num_letters: Output vocabulary size (default 21)
+
+    Returns:
+        ENC_DEC model instance
+    """
+    return ENC_DEC(
+        node_features=hidden_dim,
+        edge_features=hidden_dim,
+        hidden_dim=hidden_dim,
+        num_encoder_layers=num_encoder_layers,
+        num_decoder_layers=num_decoder_layers,
+        k_neighbors=k_neighbors,
+        augment_eps=augment_eps,
+        dropout=dropout,
+        vocab=vocab,
+        num_letters=num_letters
+    )
