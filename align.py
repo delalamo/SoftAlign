@@ -4,7 +4,6 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import haiku as hk
-import pickle
 import argparse
 import matplotlib.pyplot as plt # Import for plotting
 
@@ -21,6 +20,7 @@ if softalign_code_path not in sys.path:
 import Input_MPNN as input_
 import END_TO_END_MODELS as ete
 import Score_align as lddt # Score_align is imported as lddt for LDDT calculation
+from utils import load_params
 
 def main():
     parser = argparse.ArgumentParser(description="Run SoftAlign for protein structural alignment and LDDT scoring without TM-align.")
@@ -99,11 +99,10 @@ def main():
 
     # Load model parameters
     try:
-        with open(args.model_path, "rb") as f:
-            params = pickle.load(f)
-        print(f"✅ Loaded model params from {args.model_path}")
-    except FileNotFoundError:
-        print(f"Error: Model parameters file not found at {args.model_path}.")
+        params = load_params(args.model_path)
+        print(f"✅ Loaded model params")
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
         print("Please ensure you have cloned the SoftAlign repository and downloaded the model weights into the 'models' directory.")
         sys.exit(1)
     except Exception as e:

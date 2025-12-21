@@ -5,6 +5,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from . import utils
+
 Gelu = functools.partial(jax.nn.gelu, approximate=False)
 
 class SafeKey:
@@ -499,15 +501,10 @@ import os as _os
 
 # Default path to ProteinMPNN weights (relative to this module)
 _MODELS_DIR = _os.path.join(_os.path.dirname(__file__), 'models')
-DEFAULT_MPNN_WEIGHTS = _os.path.join(_MODELS_DIR, 'v_48_020.pkl')
+DEFAULT_MPNN_WEIGHTS = 'v_48_020'  # Use variant name, resolution happens in load function
 
-# Available ProteinMPNN weight variants
-MPNN_WEIGHT_VARIANTS = {
-    'v_48_002': _os.path.join(_MODELS_DIR, 'v_48_002.pkl'),
-    'v_48_010': _os.path.join(_MODELS_DIR, 'v_48_010.pkl'),
-    'v_48_020': _os.path.join(_MODELS_DIR, 'v_48_020.pkl'),  # default
-    'v_48_030': _os.path.join(_MODELS_DIR, 'v_48_030.pkl'),
-}
+# Available ProteinMPNN weight variants (base names without extension)
+MPNN_WEIGHT_VARIANTS = ['v_48_002', 'v_48_010', 'v_48_020', 'v_48_030']
 
 
 def load_colabdesign_weights(init_params, weights_path=None):
@@ -518,7 +515,7 @@ def load_colabdesign_weights(init_params, weights_path=None):
 
     Args:
         init_params: Initialized parameters from hk.transform(...).init()
-        weights_path: Path to .pkl weights file, or name of variant
+        weights_path: Path to weights file, or name of variant
                       (e.g., 'v_48_020'). If None, uses default weights.
                       Available variants: v_48_002, v_48_010, v_48_020, v_48_030
 
@@ -548,17 +545,26 @@ def load_colabdesign_weights(init_params, weights_path=None):
 
         output = transformed.apply(params, rng, X, mask, residue_idx, chain_idx, S)
     """
-    import joblib
-
     # Resolve weights path
     if weights_path is None:
         weights_path = DEFAULT_MPNN_WEIGHTS
-    elif weights_path in MPNN_WEIGHT_VARIANTS:
-        weights_path = MPNN_WEIGHT_VARIANTS[weights_path]
-    # Otherwise assume it's a direct path
 
-    checkpoint = joblib.load(weights_path)
-    loaded_params = checkpoint['model_state_dict']
+    # If it's a variant name, resolve to full path (without extension)
+    if weights_path in MPNN_WEIGHT_VARIANTS:
+        base_path = _os.path.join(_MODELS_DIR, weights_path)
+    else:
+        # Remove extension if present for consistent handling
+        base_path = weights_path
+        if base_path.endswith('.npz'):
+            base_path = base_path[:-4]
+
+    npz_path = base_path + '.npz'
+    data = dict(np.load(npz_path, allow_pickle=False))
+    # Unflatten the dictionary structure
+    checkpoint = utils.unflatten_dict(data)
+    loaded_params = checkpoint.get('model_state_dict', checkpoint)
+    # Convert numpy arrays to JAX arrays
+    loaded_params = utils.convert_numpy_to_jax(loaded_params)
 
     new_params = {}
     cd_prefix = 'protein_mpnn/~/'

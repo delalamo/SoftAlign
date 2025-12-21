@@ -10,8 +10,6 @@ import matplotlib.pyplot as plt
 import csv
 import time
 
-# Import SoftAlign modules from the cloned repository
-# Assuming SoftAlign directory is sibling to this script or in current working dir
 # Add SoftAlign directory to sys.path
 softalign_path = os.path.join(os.getcwd(), '') # Assuming you are in the SoftAlign directory
 if softalign_path not in sys.path:
@@ -20,6 +18,8 @@ if softalign_path not in sys.path:
 softalign_code_path = os.path.join(softalign_path, 'softalign')
 if softalign_code_path not in sys.path:
     sys.path.append(softalign_code_path)
+
+# Import SoftAlign modules
 import ENCODING as enco
 import Score_align as score_
 import utils
@@ -134,11 +134,10 @@ def main():
         raise ValueError("Invalid model type selected.")
 
     try:
-        with open(params_path, "rb") as f:
-            params = pickle.load(f)
-        print(f"✅ Loaded parameters for {args.model_type} model from {params_path}")
-    except FileNotFoundError:
-        print(f"Error: Model parameters file not found at {params_path}.")
+        params = utils.load_params(params_path)
+        print(f"✅ Loaded parameters for {args.model_type} model")
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
         print("Please ensure you have cloned the SoftAlign repository and downloaded the model weights into the 'models' directory.")
         sys.exit(1)
     except Exception as e:
