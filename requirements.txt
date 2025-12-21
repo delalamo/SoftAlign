@@ -1,5 +1,8 @@
-numpy
-pandas
+numpy>=1.26
+pandas>=2.2
 matplotlib
-biopython
-jax[cpu]
+biopython>=1.85
+jax>=0.4.20
+jaxlib>=0.4.20
+dm-haiku>=0.0.12
+joblib

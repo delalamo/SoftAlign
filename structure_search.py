@@ -9,6 +9,83 @@ import argparse
 import matplotlib.pyplot as plt
 import csv
 import time
+from typing import Any, Dict
+
+
+def _unflatten_dict(d: Dict[str, Any], sep: str = "|||") -> Dict[str, Any]:
+    """Unflatten a dictionary with separator-joined keys.
+
+    Args:
+        d: Flat dictionary with keys like "a|||b|||c".
+        sep: Separator used in keys (||| to avoid conflicts with haiku's /).
+
+    Returns:
+        Nested dictionary structure.
+    """
+    result: Dict[str, Any] = {}
+    for key, value in d.items():
+        parts = key.split(sep)
+        current = result
+        for part in parts[:-1]:
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+        current[parts[-1]] = value
+    return result
+
+
+def _convert_numpy_to_jax(obj: Any) -> Any:
+    """Recursively convert numpy arrays to JAX arrays."""
+    if isinstance(obj, dict):
+        return {k: _convert_numpy_to_jax(v) for k, v in obj.items()}
+    elif isinstance(obj, np.ndarray):
+        return jnp.array(obj)
+    else:
+        return obj
+
+
+def load_softalign_params(model_path: str) -> Dict[str, Any]:
+    """Load SoftAlign parameters from file.
+
+    Supports both npz format (preferred, version-agnostic) and pickle format
+    (legacy, requires matching JAX version). The function tries npz first,
+    then falls back to pickle.
+
+    Args:
+        model_path: Path to the model file (without extension for npz lookup).
+
+    Returns:
+        Dictionary of model parameters.
+
+    Raises:
+        FileNotFoundError: If neither npz nor pickle file is found.
+    """
+    # Try npz format first (preferred, version-agnostic)
+    npz_path = model_path + ".npz" if not model_path.endswith(".npz") else model_path
+    try:
+        with open(npz_path, "rb") as f:
+            data = dict(np.load(f, allow_pickle=False))
+        # Unflatten the dictionary structure and convert to JAX arrays
+        params = _unflatten_dict(data)
+        params = _convert_numpy_to_jax(params)
+        print(f"Loaded model parameters from {npz_path} (npz format)")
+        return params
+    except FileNotFoundError:
+        pass  # Fall through to pickle format
+
+    # Fall back to pickle format (legacy)
+    pickle_path = model_path.replace(".npz", "") if model_path.endswith(".npz") else model_path
+    try:
+        with open(pickle_path, "rb") as f:
+            params = pickle.load(f)
+        print(f"Loaded model parameters from {pickle_path} (pickle format)")
+        return params
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"Model parameters not found. Tried:\n"
+            f"  - {npz_path}\n"
+            f"  - {pickle_path}"
+        )
 
 # Import SoftAlign modules from the cloned repository
 # Assuming SoftAlign directory is sibling to this script or in current working dir
@@ -134,11 +211,10 @@ def main():
         raise ValueError("Invalid model type selected.")
 
     try:
-        with open(params_path, "rb") as f:
-            params = pickle.load(f)
-        print(f"✅ Loaded parameters for {args.model_type} model from {params_path}")
-    except FileNotFoundError:
-        print(f"Error: Model parameters file not found at {params_path}.")
+        params = load_softalign_params(params_path)
+        print(f"✅ Loaded parameters for {args.model_type} model")
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
         print("Please ensure you have cloned the SoftAlign repository and downloaded the model weights into the 'models' directory.")
         sys.exit(1)
     except Exception as e:

@@ -1,9 +1,42 @@
 import functools
+from typing import Any, Dict
 
 import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
+
+
+def _unflatten_dict(d: Dict[str, Any], sep: str = "|||") -> Dict[str, Any]:
+    """Unflatten a dictionary with separator-joined keys.
+
+    Args:
+        d: Flat dictionary with keys like "a|||b|||c".
+        sep: Separator used in keys (||| to avoid conflicts with haiku's /).
+
+    Returns:
+        Nested dictionary structure.
+    """
+    result: Dict[str, Any] = {}
+    for key, value in d.items():
+        parts = key.split(sep)
+        current = result
+        for part in parts[:-1]:
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+        current[parts[-1]] = value
+    return result
+
+
+def _convert_numpy_to_jax(obj: Any) -> Any:
+    """Recursively convert numpy arrays to JAX arrays."""
+    if isinstance(obj, dict):
+        return {k: _convert_numpy_to_jax(v) for k, v in obj.items()}
+    elif isinstance(obj, np.ndarray):
+        return jnp.array(obj)
+    else:
+        return obj
 
 Gelu = functools.partial(jax.nn.gelu, approximate=False)
 
@@ -499,15 +532,10 @@ import os as _os
 
 # Default path to ProteinMPNN weights (relative to this module)
 _MODELS_DIR = _os.path.join(_os.path.dirname(__file__), 'models')
-DEFAULT_MPNN_WEIGHTS = _os.path.join(_MODELS_DIR, 'v_48_020.pkl')
+DEFAULT_MPNN_WEIGHTS = 'v_48_020'  # Use variant name, resolution happens in load function
 
-# Available ProteinMPNN weight variants
-MPNN_WEIGHT_VARIANTS = {
-    'v_48_002': _os.path.join(_MODELS_DIR, 'v_48_002.pkl'),
-    'v_48_010': _os.path.join(_MODELS_DIR, 'v_48_010.pkl'),
-    'v_48_020': _os.path.join(_MODELS_DIR, 'v_48_020.pkl'),  # default
-    'v_48_030': _os.path.join(_MODELS_DIR, 'v_48_030.pkl'),
-}
+# Available ProteinMPNN weight variants (base names without extension)
+MPNN_WEIGHT_VARIANTS = ['v_48_002', 'v_48_010', 'v_48_020', 'v_48_030']
 
 
 def load_colabdesign_weights(init_params, weights_path=None):
@@ -516,9 +544,13 @@ def load_colabdesign_weights(init_params, weights_path=None):
     This function maps parameter names from ColabDesign's naming convention
     (with 'protein_mpnn/~/' prefix) to SoftAlign's naming convention.
 
+    Supports both npz format (preferred, version-agnostic) and joblib pkl format
+    (legacy, requires matching JAX version). The function tries npz first,
+    then falls back to pkl.
+
     Args:
         init_params: Initialized parameters from hk.transform(...).init()
-        weights_path: Path to .pkl weights file, or name of variant
+        weights_path: Path to weights file, or name of variant
                       (e.g., 'v_48_020'). If None, uses default weights.
                       Available variants: v_48_002, v_48_010, v_48_020, v_48_030
 
@@ -548,30 +580,71 @@ def load_colabdesign_weights(init_params, weights_path=None):
 
         output = transformed.apply(params, rng, X, mask, residue_idx, chain_idx, S)
     """
-    import joblib
-
     # Resolve weights path
     if weights_path is None:
         weights_path = DEFAULT_MPNN_WEIGHTS
-    elif weights_path in MPNN_WEIGHT_VARIANTS:
-        weights_path = MPNN_WEIGHT_VARIANTS[weights_path]
-    # Otherwise assume it's a direct path
 
-    checkpoint = joblib.load(weights_path)
-    loaded_params = checkpoint['model_state_dict']
+    # If it's a variant name, resolve to full path (without extension)
+    if weights_path in MPNN_WEIGHT_VARIANTS:
+        base_path = _os.path.join(_MODELS_DIR, weights_path)
+    else:
+        # Remove extension if present for consistent handling
+        base_path = weights_path
+        if base_path.endswith('.npz'):
+            base_path = base_path[:-4]
+        elif base_path.endswith('.pkl'):
+            base_path = base_path[:-4]
 
-    new_params = {}
-    cd_prefix = 'protein_mpnn/~/'
+    # Try npz format first (preferred, version-agnostic)
+    npz_path = base_path + '.npz'
+    if _os.path.exists(npz_path):
+        data = dict(np.load(npz_path, allow_pickle=False))
+        # Unflatten the dictionary structure
+        checkpoint = _unflatten_dict(data)
+        loaded_params = checkpoint.get('model_state_dict', checkpoint)
 
-    for our_key in init_params.keys():
-        cd_key = cd_prefix + our_key
-        if cd_key in loaded_params:
-            new_params[our_key] = loaded_params[cd_key]
-        else:
-            raise KeyError(f"No matching weights found for '{our_key}' "
-                          f"(looked for '{cd_key}')")
+        new_params = {}
+        cd_prefix = 'protein_mpnn/~/'
 
-    return new_params
+        for our_key in init_params.keys():
+            cd_key = cd_prefix + our_key
+            if cd_key in loaded_params:
+                # Convert numpy arrays to JAX arrays
+                param_value = loaded_params[cd_key]
+                if isinstance(param_value, np.ndarray):
+                    param_value = jnp.array(param_value)
+                new_params[our_key] = param_value
+            else:
+                raise KeyError(f"No matching weights found for '{our_key}' "
+                              f"(looked for '{cd_key}')")
+
+        return new_params
+
+    # Fall back to pkl format (legacy)
+    pkl_path = base_path + '.pkl'
+    if _os.path.exists(pkl_path):
+        import joblib
+        checkpoint = joblib.load(pkl_path)
+        loaded_params = checkpoint['model_state_dict']
+
+        new_params = {}
+        cd_prefix = 'protein_mpnn/~/'
+
+        for our_key in init_params.keys():
+            cd_key = cd_prefix + our_key
+            if cd_key in loaded_params:
+                new_params[our_key] = loaded_params[cd_key]
+            else:
+                raise KeyError(f"No matching weights found for '{our_key}' "
+                              f"(looked for '{cd_key}')")
+
+        return new_params
+
+    raise FileNotFoundError(
+        f"Weights not found. Tried:\n"
+        f"  - {npz_path}\n"
+        f"  - {pkl_path}"
+    )
 
 
 def create_enc_dec_model(hidden_dim=128, num_encoder_layers=3, num_decoder_layers=3,
