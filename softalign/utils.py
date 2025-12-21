@@ -1,6 +1,60 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+from typing import Any, Dict
+
+
+def unflatten_dict(d: Dict[str, Any], sep: str = "|||") -> Dict[str, Any]:
+    """Unflatten a dictionary with separator-joined keys.
+
+    Args:
+        d: Flat dictionary with keys like "a|||b|||c".
+        sep: Separator used in keys (||| to avoid conflicts with haiku's /).
+
+    Returns:
+        Nested dictionary structure.
+    """
+    result: Dict[str, Any] = {}
+    for key, value in d.items():
+        parts = key.split(sep)
+        current = result
+        for part in parts[:-1]:
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+        current[parts[-1]] = value
+    return result
+
+
+def convert_numpy_to_jax(obj: Any) -> Any:
+    """Recursively convert numpy arrays to JAX arrays."""
+    if isinstance(obj, dict):
+        return {k: convert_numpy_to_jax(v) for k, v in obj.items()}
+    elif isinstance(obj, np.ndarray):
+        return jnp.array(obj)
+    else:
+        return obj
+
+
+def load_params(model_path: str) -> Dict[str, Any]:
+    """Load model parameters from npz file.
+
+    Args:
+        model_path: Path to the model file (with or without .npz extension).
+
+    Returns:
+        Dictionary of model parameters.
+
+    Raises:
+        FileNotFoundError: If npz file is not found.
+    """
+    npz_path = model_path + ".npz" if not model_path.endswith(".npz") else model_path
+    with open(npz_path, "rb") as f:
+        data = dict(np.load(f, allow_pickle=False))
+    params = unflatten_dict(data)
+    params = convert_numpy_to_jax(params)
+    print(f"Loaded model parameters from {npz_path}")
+    return params
 
 
 def pad_(X_1, mask_1, res_1, chain_1, X_2, mask_2, res_2, chain_2, max_len):

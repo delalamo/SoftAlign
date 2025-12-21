@@ -1,42 +1,11 @@
 import functools
-from typing import Any, Dict
 
 import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-
-def _unflatten_dict(d: Dict[str, Any], sep: str = "|||") -> Dict[str, Any]:
-    """Unflatten a dictionary with separator-joined keys.
-
-    Args:
-        d: Flat dictionary with keys like "a|||b|||c".
-        sep: Separator used in keys (||| to avoid conflicts with haiku's /).
-
-    Returns:
-        Nested dictionary structure.
-    """
-    result: Dict[str, Any] = {}
-    for key, value in d.items():
-        parts = key.split(sep)
-        current = result
-        for part in parts[:-1]:
-            if part not in current:
-                current[part] = {}
-            current = current[part]
-        current[parts[-1]] = value
-    return result
-
-
-def _convert_numpy_to_jax(obj: Any) -> Any:
-    """Recursively convert numpy arrays to JAX arrays."""
-    if isinstance(obj, dict):
-        return {k: _convert_numpy_to_jax(v) for k, v in obj.items()}
-    elif isinstance(obj, np.ndarray):
-        return jnp.array(obj)
-    else:
-        return obj
+from . import utils
 
 Gelu = functools.partial(jax.nn.gelu, approximate=False)
 
@@ -592,8 +561,10 @@ def load_colabdesign_weights(init_params, weights_path=None):
     npz_path = base_path + '.npz'
     data = dict(np.load(npz_path, allow_pickle=False))
     # Unflatten the dictionary structure
-    checkpoint = _unflatten_dict(data)
+    checkpoint = utils.unflatten_dict(data)
     loaded_params = checkpoint.get('model_state_dict', checkpoint)
+    # Convert numpy arrays to JAX arrays
+    loaded_params = utils.convert_numpy_to_jax(loaded_params)
 
     new_params = {}
     cd_prefix = 'protein_mpnn/~/'
@@ -601,11 +572,7 @@ def load_colabdesign_weights(init_params, weights_path=None):
     for our_key in init_params.keys():
         cd_key = cd_prefix + our_key
         if cd_key in loaded_params:
-            # Convert numpy arrays to JAX arrays
-            param_value = loaded_params[cd_key]
-            if isinstance(param_value, np.ndarray):
-                param_value = jnp.array(param_value)
-            new_params[our_key] = param_value
+            new_params[our_key] = loaded_params[cd_key]
         else:
             raise KeyError(f"No matching weights found for '{our_key}' "
                           f"(looked for '{cd_key}')")

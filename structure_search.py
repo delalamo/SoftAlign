@@ -9,64 +9,7 @@ import argparse
 import matplotlib.pyplot as plt
 import csv
 import time
-from typing import Any, Dict
 
-
-def _unflatten_dict(d: Dict[str, Any], sep: str = "|||") -> Dict[str, Any]:
-    """Unflatten a dictionary with separator-joined keys.
-
-    Args:
-        d: Flat dictionary with keys like "a|||b|||c".
-        sep: Separator used in keys (||| to avoid conflicts with haiku's /).
-
-    Returns:
-        Nested dictionary structure.
-    """
-    result: Dict[str, Any] = {}
-    for key, value in d.items():
-        parts = key.split(sep)
-        current = result
-        for part in parts[:-1]:
-            if part not in current:
-                current[part] = {}
-            current = current[part]
-        current[parts[-1]] = value
-    return result
-
-
-def _convert_numpy_to_jax(obj: Any) -> Any:
-    """Recursively convert numpy arrays to JAX arrays."""
-    if isinstance(obj, dict):
-        return {k: _convert_numpy_to_jax(v) for k, v in obj.items()}
-    elif isinstance(obj, np.ndarray):
-        return jnp.array(obj)
-    else:
-        return obj
-
-
-def load_softalign_params(model_path: str) -> Dict[str, Any]:
-    """Load SoftAlign parameters from npz file.
-
-    Args:
-        model_path: Path to the model file (with or without .npz extension).
-
-    Returns:
-        Dictionary of model parameters.
-
-    Raises:
-        FileNotFoundError: If npz file is not found.
-    """
-    npz_path = model_path + ".npz" if not model_path.endswith(".npz") else model_path
-    with open(npz_path, "rb") as f:
-        data = dict(np.load(f, allow_pickle=False))
-    # Unflatten the dictionary structure and convert to JAX arrays
-    params = _unflatten_dict(data)
-    params = _convert_numpy_to_jax(params)
-    print(f"Loaded model parameters from {npz_path}")
-    return params
-
-# Import SoftAlign modules from the cloned repository
-# Assuming SoftAlign directory is sibling to this script or in current working dir
 # Add SoftAlign directory to sys.path
 softalign_path = os.path.join(os.getcwd(), '') # Assuming you are in the SoftAlign directory
 if softalign_path not in sys.path:
@@ -75,6 +18,8 @@ if softalign_path not in sys.path:
 softalign_code_path = os.path.join(softalign_path, 'softalign')
 if softalign_code_path not in sys.path:
     sys.path.append(softalign_code_path)
+
+# Import SoftAlign modules
 import ENCODING as enco
 import Score_align as score_
 import utils
@@ -189,7 +134,7 @@ def main():
         raise ValueError("Invalid model type selected.")
 
     try:
-        params = load_softalign_params(params_path)
+        params = utils.load_params(params_path)
         print(f"✅ Loaded parameters for {args.model_type} model")
     except FileNotFoundError as e:
         print(f"Error: {e}")
