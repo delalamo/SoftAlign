@@ -544,10 +544,6 @@ def load_colabdesign_weights(init_params, weights_path=None):
     This function maps parameter names from ColabDesign's naming convention
     (with 'protein_mpnn/~/' prefix) to SoftAlign's naming convention.
 
-    Supports both npz format (preferred, version-agnostic) and joblib pkl format
-    (legacy, requires matching JAX version). The function tries npz first,
-    then falls back to pkl.
-
     Args:
         init_params: Initialized parameters from hk.transform(...).init()
         weights_path: Path to weights file, or name of variant
@@ -592,59 +588,29 @@ def load_colabdesign_weights(init_params, weights_path=None):
         base_path = weights_path
         if base_path.endswith('.npz'):
             base_path = base_path[:-4]
-        elif base_path.endswith('.pkl'):
-            base_path = base_path[:-4]
 
-    # Try npz format first (preferred, version-agnostic)
     npz_path = base_path + '.npz'
-    if _os.path.exists(npz_path):
-        data = dict(np.load(npz_path, allow_pickle=False))
-        # Unflatten the dictionary structure
-        checkpoint = _unflatten_dict(data)
-        loaded_params = checkpoint.get('model_state_dict', checkpoint)
+    data = dict(np.load(npz_path, allow_pickle=False))
+    # Unflatten the dictionary structure
+    checkpoint = _unflatten_dict(data)
+    loaded_params = checkpoint.get('model_state_dict', checkpoint)
 
-        new_params = {}
-        cd_prefix = 'protein_mpnn/~/'
+    new_params = {}
+    cd_prefix = 'protein_mpnn/~/'
 
-        for our_key in init_params.keys():
-            cd_key = cd_prefix + our_key
-            if cd_key in loaded_params:
-                # Convert numpy arrays to JAX arrays
-                param_value = loaded_params[cd_key]
-                if isinstance(param_value, np.ndarray):
-                    param_value = jnp.array(param_value)
-                new_params[our_key] = param_value
-            else:
-                raise KeyError(f"No matching weights found for '{our_key}' "
-                              f"(looked for '{cd_key}')")
+    for our_key in init_params.keys():
+        cd_key = cd_prefix + our_key
+        if cd_key in loaded_params:
+            # Convert numpy arrays to JAX arrays
+            param_value = loaded_params[cd_key]
+            if isinstance(param_value, np.ndarray):
+                param_value = jnp.array(param_value)
+            new_params[our_key] = param_value
+        else:
+            raise KeyError(f"No matching weights found for '{our_key}' "
+                          f"(looked for '{cd_key}')")
 
-        return new_params
-
-    # Fall back to pkl format (legacy)
-    pkl_path = base_path + '.pkl'
-    if _os.path.exists(pkl_path):
-        import joblib
-        checkpoint = joblib.load(pkl_path)
-        loaded_params = checkpoint['model_state_dict']
-
-        new_params = {}
-        cd_prefix = 'protein_mpnn/~/'
-
-        for our_key in init_params.keys():
-            cd_key = cd_prefix + our_key
-            if cd_key in loaded_params:
-                new_params[our_key] = loaded_params[cd_key]
-            else:
-                raise KeyError(f"No matching weights found for '{our_key}' "
-                              f"(looked for '{cd_key}')")
-
-        return new_params
-
-    raise FileNotFoundError(
-        f"Weights not found. Tried:\n"
-        f"  - {npz_path}\n"
-        f"  - {pkl_path}"
-    )
+    return new_params
 
 
 def create_enc_dec_model(hidden_dim=128, num_encoder_layers=3, num_decoder_layers=3,

@@ -4,7 +4,6 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import haiku as hk
-import pickle
 import argparse
 import matplotlib.pyplot as plt # Import for plotting
 from typing import Any, Dict
@@ -43,47 +42,25 @@ def _convert_numpy_to_jax(obj: Any) -> Any:
 
 
 def load_softalign_params(model_path: str) -> Dict[str, Any]:
-    """Load SoftAlign parameters from file.
-
-    Supports both npz format (preferred, version-agnostic) and pickle format
-    (legacy, requires matching JAX version). The function tries npz first,
-    then falls back to pickle.
+    """Load SoftAlign parameters from npz file.
 
     Args:
-        model_path: Path to the model file (without extension for npz lookup).
+        model_path: Path to the model file (with or without .npz extension).
 
     Returns:
         Dictionary of model parameters.
 
     Raises:
-        FileNotFoundError: If neither npz nor pickle file is found.
+        FileNotFoundError: If npz file is not found.
     """
-    # Try npz format first (preferred, version-agnostic)
     npz_path = model_path + ".npz" if not model_path.endswith(".npz") else model_path
-    try:
-        with open(npz_path, "rb") as f:
-            data = dict(np.load(f, allow_pickle=False))
-        # Unflatten the dictionary structure and convert to JAX arrays
-        params = _unflatten_dict(data)
-        params = _convert_numpy_to_jax(params)
-        print(f"Loaded model parameters from {npz_path} (npz format)")
-        return params
-    except FileNotFoundError:
-        pass  # Fall through to pickle format
-
-    # Fall back to pickle format (legacy)
-    pickle_path = model_path.replace(".npz", "") if model_path.endswith(".npz") else model_path
-    try:
-        with open(pickle_path, "rb") as f:
-            params = pickle.load(f)
-        print(f"Loaded model parameters from {pickle_path} (pickle format)")
-        return params
-    except FileNotFoundError:
-        raise FileNotFoundError(
-            f"Model parameters not found. Tried:\n"
-            f"  - {npz_path}\n"
-            f"  - {pickle_path}"
-        )
+    with open(npz_path, "rb") as f:
+        data = dict(np.load(f, allow_pickle=False))
+    # Unflatten the dictionary structure and convert to JAX arrays
+    params = _unflatten_dict(data)
+    params = _convert_numpy_to_jax(params)
+    print(f"Loaded model parameters from {npz_path}")
+    return params
 
 # Add SoftAlign directory to sys.path
 softalign_path = os.path.join(os.getcwd(), '') # Assuming you are in the SoftAlign directory
