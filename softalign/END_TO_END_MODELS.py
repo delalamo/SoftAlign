@@ -77,7 +77,7 @@ class END_TO_END:
       self.siz = node_features
       self.soft_max = soft_max
 
-    def align(self, h_V1, h_V2, lens, t, gap_matrix=None, open_matrix=None):
+    def align(self, h_V1, h_V2, lens, t, gap_matrix=None, open_matrix=None, penalize_start_gap=False):
       """Align embeddings using Smith-Waterman.
 
       Args:
@@ -87,6 +87,7 @@ class END_TO_END:
         t: Temperature for soft alignment
         gap_matrix: Optional position-dependent gap extension penalties (batch, query_len, target_len)
         open_matrix: Optional position-dependent gap open penalties (batch, query_len, target_len)
+        penalize_start_gap: If True, penalize alignments starting after position 1
 
       Returns:
         Tuple of (soft_alignment, similarity_matrix, scores)
@@ -98,9 +99,9 @@ class END_TO_END:
       sim_matrix = jnp.einsum("nia,nja->nij",h_V1,h_V2)
       if self.soft_max == False:
         if self.affine:
-            # Pass gap matrices if provided
+            # Pass gap matrices and start gap penalty if provided
             scores,soft_aln  = self.my_sw_func(sim_matrix, lens, gap[0], popen[0], t,
-                                               gap_matrix, open_matrix)
+                                               gap_matrix, open_matrix, penalize_start_gap)
         else:
             scores,soft_aln  = self.my_sw_func(sim_matrix, lens, gap[0],t)
         return soft_aln,sim_matrix,scores
