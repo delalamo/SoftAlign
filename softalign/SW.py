@@ -250,29 +250,29 @@ def sw_affine(restrict_turns=True,
       sm["gap"] = rotated_gap
       sm["open"] = rotated_open
       hij = jax.lax.scan(_step_matrix, prev, sm, unroll=unroll)[-1][idx]
-    elif penalize_start_gap:
-      # Create start penalty: penalty[j] for starting at reference column j
+    else:
+      # Pre-compute start penalty (cheap O(b) operation, needed for sky branch)
       # j=0: 0 (no penalty, column 0 is position 1)
       # j=1: open (one gap at position 1, starting at position 2)
       # j>=2: open + gap * (j - 1) (gap opening + extensions)
-      # Note: This assumes 0-indexed columns where column 0 = IMGT position 1
       col_indices = jnp.arange(b - 1)  # -1 because we use x[:-1,:-1]
       start_penalty = jnp.where(
           col_indices == 0,
           0.0,
           open + gap * (col_indices - 1)
       )
-      # For j=1: open + gap * 0 = open
-      # For j=2: open + gap * 1
-      # etc.
-
-      # Rotate the penalty to match DP format
       rotated_penalty = rotate_penalty(start_penalty, a - 1, b - 1)
-      sm["start_pen"] = rotated_penalty
 
-      hij = jax.lax.scan(_step_with_sky, prev, sm, unroll=unroll)[-1][idx]
-    else:
-      hij = jax.lax.scan(_step_scalar, prev, sm, unroll=unroll)[-1][idx]
+      # Use jax.lax.cond to avoid Python conditional on traced boolean
+      # This allows penalize_start_gap to be a traced value in JIT
+      def _run_with_sky():
+        sm_sky = {"x": sm["x"], "o": sm["o"], "start_pen": rotated_penalty}
+        return jax.lax.scan(_step_with_sky, prev, sm_sky, unroll=unroll)[-1][idx]
+
+      def _run_scalar():
+        return jax.lax.scan(_step_scalar, prev, sm, unroll=unroll)[-1][idx]
+
+      hij = jax.lax.cond(penalize_start_gap, _run_with_sky, _run_scalar)
 
     # sink
     return _soft_maximum(hij + x[1:,1:,None], mask=mask[1:,1:,None])
