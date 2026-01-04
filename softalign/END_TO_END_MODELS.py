@@ -77,7 +77,20 @@ class END_TO_END:
       self.siz = node_features
       self.soft_max = soft_max
 
-    def align(self, h_V1, h_V2, lens, t):
+    def align(self, h_V1, h_V2, lens, t, gap_matrix=None, open_matrix=None):
+      """Align embeddings using Smith-Waterman.
+
+      Args:
+        h_V1: Query embeddings (batch, query_len, embed_dim)
+        h_V2: Target embeddings (batch, target_len, embed_dim)
+        lens: Tuple of (query_len, target_len) per batch
+        t: Temperature for soft alignment
+        gap_matrix: Optional position-dependent gap extension penalties (batch, query_len, target_len)
+        open_matrix: Optional position-dependent gap open penalties (batch, query_len, target_len)
+
+      Returns:
+        Tuple of (soft_alignment, similarity_matrix, scores)
+      """
       gap = hk.get_parameter("gap", shape=[1], init=hk.initializers.RandomNormal(0.1, -1))
       if self.affine:
           popen = hk.get_parameter("open", shape=[1],init = hk.initializers.RandomNormal(0.1,-3))
@@ -85,11 +98,13 @@ class END_TO_END:
       sim_matrix = jnp.einsum("nia,nja->nij",h_V1,h_V2)
       if self.soft_max == False:
         if self.affine:
-            scores,soft_aln  = self.my_sw_func(sim_matrix, lens,gap[0],popen[0],t)
+            # Pass gap matrices if provided
+            scores,soft_aln  = self.my_sw_func(sim_matrix, lens, gap[0], popen[0], t,
+                                               gap_matrix, open_matrix)
         else:
             scores,soft_aln  = self.my_sw_func(sim_matrix, lens, gap[0],t)
         return soft_aln,sim_matrix,scores
-      
+
       else:
 
         soft_aln = vmap(soft_max_single, in_axes=(0, 0, None))(sim_matrix, lens,t)
