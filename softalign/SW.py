@@ -75,8 +75,9 @@ def sw_affine(restrict_turns=True,
     NINF: Negative infinity value for masking
 
   Returns:
-    Function that takes (x, lengths, gap, open, temp, gap_matrix, open_matrix)
-    where gap_matrix and open_matrix are optional position-dependent penalties.
+    Function that takes (x, lengths, gap, open, temp, gap_matrix, open_matrix, penalize_start_gap)
+    where gap_matrix and open_matrix are optional position-dependent penalties,
+    and penalize_start_gap enables N-terminal start gap penalties.
   """
   # rotate matrix for vectorized dynamic-programming
 
@@ -98,9 +99,27 @@ def sw_affine(restrict_turns=True,
     # Use 0.0 as fill value for gap matrices (no penalty outside valid region)
     return jnp.full([n,m], 0.0).at[i,j].set(x)
 
+  def rotate_penalty(penalty_1d, a, b):
+    """Rotate a 1D penalty array to match the striped DP format.
+
+    Args:
+      penalty_1d: 1D array of shape (b,) with penalty for each reference column
+      a, b: Original matrix dimensions
+
+    Returns:
+      2D rotated penalty array of shape (n, m) matching the DP format
+    """
+    ar,br = jnp.arange(a)[::-1,None], jnp.arange(b)[None,:]
+    i,j = (br-ar)+(a-1),(ar+br)//2
+    n,m = (a+b-1),(a+b)//2
+    # Create penalty matrix by broadcasting the 1D penalty across rows
+    penalty_2d = jnp.broadcast_to(penalty_1d, (a, b))
+    # Rotate to match DP format, using 0.0 as fill value
+    return jnp.full([n,m], 0.0).at[i,j].set(penalty_2d)
+
   # fill the scoring matrix
   def sco(x, lengths, gap=0.0, open=0.0, temp=1.0,
-          gap_matrix=None, open_matrix=None):
+          gap_matrix=None, open_matrix=None, penalize_start_gap=False):
     """
     Args:
       x: Similarity matrix (query_len, target_len)
@@ -110,6 +129,8 @@ def sw_affine(restrict_turns=True,
       temp: Temperature for soft maximum
       gap_matrix: Optional position-dependent gap extension penalties (query_len, target_len)
       open_matrix: Optional position-dependent gap open penalties (query_len, target_len)
+      penalize_start_gap: If True, penalize alignments starting after
+        reference position 1. Penalty = open + gap * (j - 1) for j >= 1.
     """
     # Check if we're using position-dependent gap penalties
     use_matrix_gaps = gap_matrix is not None and open_matrix is not None
@@ -181,6 +202,39 @@ def sw_affine(restrict_turns=True,
       h0 = jnp.stack([h0_Align, h0_Right, h0_Down], axis=-1)
       return (h1,h0),h0
 
+    def _step_with_sky(prev, sm):
+      """Step function with Sky term for local alignment start with penalty."""
+      h2,h1 = prev   # previous two rows of scoring (hij) mtxs
+
+      # Pad with NINF (not 0) to prevent spurious paths through padded positions
+      Align = jnp.pad(h2,[[0,0],[0,1]],constant_values=(NINF,NINF)) + sm["x"][:,None]
+      Right = _cond(sm["o"], _pad(h1[:-1],([1,0],[0,0])),h1)
+      Down  = _cond(sm["o"], h1,_pad(h1[1:],([0,1],[0,0])))
+
+      # Sky term: start fresh at this position with start penalty
+      # sm["start_pen"] is the rotated start penalty (negative for later columns)
+      Sky = sm["x"] + sm["start_pen"]
+
+      # add gap penalty
+      if penalize_turns:
+        Right += jnp.stack([open,gap,open])
+        Down += jnp.stack([open,open,gap])
+      else:
+        gap_pen = jnp.stack([open,gap,gap])
+        Right += gap_pen
+        Down += gap_pen
+
+      if restrict_turns: Right = Right[:,:2]
+
+      # Include Sky in Align computation (it's another source for alignment state)
+      # Sky contributes to starting a new alignment at this position
+      Align_with_sky = jnp.concatenate([Align, Sky[:, None]], axis=-1)
+      h0_Align = _soft_maximum(Align_with_sky, -1)
+      h0_Right = _soft_maximum(Right,-1)
+      h0_Down = _soft_maximum(Down,-1)
+      h0 = jnp.stack([h0_Align, h0_Right, h0_Down], axis=-1)
+      return (h1,h0),h0
+
     # mask
     a,b = x.shape
     real_a, real_b = lengths
@@ -196,6 +250,27 @@ def sw_affine(restrict_turns=True,
       sm["gap"] = rotated_gap
       sm["open"] = rotated_open
       hij = jax.lax.scan(_step_matrix, prev, sm, unroll=unroll)[-1][idx]
+    elif penalize_start_gap:
+      # Create start penalty: penalty[j] for starting at reference column j
+      # j=0: 0 (no penalty, column 0 is position 1)
+      # j=1: open (one gap at position 1, starting at position 2)
+      # j>=2: open + gap * (j - 1) (gap opening + extensions)
+      # Note: This assumes 0-indexed columns where column 0 = IMGT position 1
+      col_indices = jnp.arange(b - 1)  # -1 because we use x[:-1,:-1]
+      start_penalty = jnp.where(
+          col_indices == 0,
+          0.0,
+          open + gap * (col_indices - 1)
+      )
+      # For j=1: open + gap * 0 = open
+      # For j=2: open + gap * 1
+      # etc.
+
+      # Rotate the penalty to match DP format
+      rotated_penalty = rotate_penalty(start_penalty, a - 1, b - 1)
+      sm["start_pen"] = rotated_penalty
+
+      hij = jax.lax.scan(_step_with_sky, prev, sm, unroll=unroll)[-1][idx]
     else:
       hij = jax.lax.scan(_step_scalar, prev, sm, unroll=unroll)[-1][idx]
 
@@ -207,7 +282,8 @@ def sw_affine(restrict_turns=True,
 
   # add batch dimension
   # Note: gap_matrix and open_matrix are batched along axis 0 if provided
+  # penalize_start_gap is a scalar (not batched)
   if batch:
-    return jax.vmap(traceback, (0, 0, None, None, None, 0, 0))
+    return jax.vmap(traceback, (0, 0, None, None, None, 0, 0, None))
   else:
     return traceback
